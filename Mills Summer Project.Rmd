@@ -5,26 +5,92 @@ date: "2025-05-28"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r}
+library(tidyverse)
+library(readxl)
+library(qcc)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+summarized_stats <- read_excel("Simulated Data Output.xlsx")
 ```
 
-## Including Plots
+```{r}
+set.seed(1)
+summarized_stats$sample_size <- 50
+simulated_df <- summarized_stats |>
+  mutate(rnorms = pmap(list(sample_size, Mean, SD), function(n, mu, sd) rnorm(n, mu, sd)),
+         rnorms = map_chr(rnorms, ~ paste(., collapse = " "))) %>%
+  bind_cols(., read.table(text = .$rnorms, sep = " "))|>
+  select(-c(sample_size,rnorms))
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+summarized_stats_time<-summarized_stats
+summarized_stats_time$sample_size <- 24*365
+
+simulated_datetime_df<-summarized_stats_time |>
+  mutate(rnorms = pmap(list(sample_size, Mean, SD), function(n, mu, sd) rnorm(n, mu, sd)),
+         rnorms = map_chr(rnorms, ~ paste(., collapse = " "))) %>%
+  bind_cols(., read.table(text = .$rnorms, sep = " "))|>
+  select(-c(sample_size,rnorms))|>
+  pivot_longer(cols = 15:8774)|>
+  mutate(across(c('name'), substr, 2, nchar(name)))|>
+  mutate(name = as.integer(name))|>
+  mutate(date_recorded = as.POSIXct(3600 * (name+4), origin = '2024-01-01', tz = "EST"))|>
+  select(-name)|>
+  rename(temp_recorded = value)
+#write_csv(simulated_df,"Simulated DF.csv")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+parOrg = par(c("mfrow", "mar"))
+par(mfrow = c(2,4), mar = c(1,1,1,1))
+rhovalues <- c(0.1, 0.5, 0.8, 0.99)
+for (i in c(1,0.1,0.01,0.001,0.0001)){
+for (rho_v in rhovalues){
+ u.data<-desk::ar1sim(n=50,
+             rho = rho_v,
+             u0 = -150,
+             var.e = i,
+             details = TRUE,
+             seed = 1)
+ plot(u.data$u.sim, plot.what = "lag", cex.legend = 0.7,
+         acc.line = TRUE, ols.line = TRUE)
+}
+}
+
+```
+
+```{r}
+simulated_df%>%
+  filter(Unit == 1)%>%
+  ggplot()+
+  geom_line(aes(x=date_recorded,y = temp_recorded))
+```
+
+```{r}
+simulated_df|>
+  psych::describe()
+```
+```{r}
+one_way <- aov(Mean~ Status, data = simulated_df)  
+??anova
+broom::tidy(one_way)  
+broom::glance.aov(aov(Mean~ Status, data = simulated_df))
+```
+
+```{r}
+sim_xbar <- qcc(simulated_df[,-c(1:14)],type="xbar",plot=FALSE)
+sim_rbar <- qcc(simulated_df[,-c(1:14)],type="R",plot=FALSE)
+```
+
+|   The $\bar{\bar{x}}$ is `r wbb_xbar$center`, with a lower limit of `r wbb_xbar$limits[1]`and upper limit of `r wbb_xbar$limits[2]`.
+|   The $\bar{R}$ is `r wbb_rbar$center`, with a lower limit of `r wbb_rbar$limits[1]` and upper limit of `r wbb_rbar$limits[2]`.
+\
+
+```{r, echo = FALSE}
+qcc(simulated_df[,-c(1:14)],type="xbar",plot=TRUE)
+qcc(simulated_df[,-c(1:14)],type="R",plot=TRUE)
+sim_xbar$violations
+sim_rbar$violations
+```
