@@ -16,10 +16,13 @@ summarized_stats <- read_excel("Simulated Data Output.xlsx")
 ```
 
 ```{r}
+rbinom(50,1,0.05)
+
+
 set.seed(1)
 summarized_stats$sample_size <- 50
 simulated_df <- summarized_stats |>
-  mutate(rnorms = pmap(list(sample_size, Mean, SD), function(n, mu, sd) rnorm(n, mu, sd)),
+  mutate(rnorms = pmap(list(sample_size, Mean, SD), function(n, mu, sd) rnorm(n, mu, sd/3)),
          rnorms = map_chr(rnorms, ~ paste(., collapse = " "))) %>%
   bind_cols(., read.table(text = .$rnorms, sep = " "))|>
   select(-c(sample_size,rnorms))
@@ -29,6 +32,7 @@ summarized_stats_time<-summarized_stats
 summarized_stats_time$sample_size <- 24*365
 
 simulated_datetime_df<-summarized_stats_time |>
+  mutate(SD= (SD/3))|>
   mutate(rnorms = pmap(list(sample_size, Mean, SD), function(n, mu, sd) rnorm(n, mu, sd)),
          rnorms = map_chr(rnorms, ~ paste(., collapse = " "))) %>%
   bind_cols(., read.table(text = .$rnorms, sep = " "))|>
@@ -43,45 +47,54 @@ simulated_datetime_df<-summarized_stats_time |>
 ```
 
 ```{r}
-parOrg = par(c("mfrow", "mar"))
-par(mfrow = c(2,4), mar = c(1,1,1,1))
-rhovalues <- c(0.1, 0.5, 0.8, 0.99)
-for (i in c(1,0.1,0.01,0.001,0.0001)){
-for (rho_v in rhovalues){
- u.data<-desk::ar1sim(n=50,
-             rho = rho_v,
-             u0 = -150,
-             var.e = i,
-             details = TRUE,
-             seed = 1)
- plot(u.data$u.sim, plot.what = "lag", cex.legend = 0.7,
-         acc.line = TRUE, ols.line = TRUE)
-}
-}
 
 ```
 
 ```{r}
-simulated_df%>%
-  filter(Unit == 1)%>%
+simulated_datetime_df_Fail <- simulated_datetime_df%>%
+  filter(Status == "Fail")%>%
+  group_by(Unit,Day = floor_date(date_recorded,"day")) |>
+  summarise(temp_recorded = max(temp_recorded))
+simulated_datetime_df_Pass <- simulated_datetime_df%>%
+  filter(Status == "Pass")%>%
+  group_by(Unit,Day = floor_date(date_recorded,"day")) |>
+  summarise(temp_recorded = max(temp_recorded))
+simulated_datetime_df_ConPass <- simulated_datetime_df%>%
+  filter(Status == "Conditional Pass")%>%
+  group_by(Unit,Day = floor_date(date_recorded,"day")) |>
+  summarise(temp_recorded_max = max(temp_recorded),
+            temp_recorded_min = min(temp_recorded)
+            )%>%
+  mutate(temp_recorded = if_else(rbeta(365,1,1) <= 0.05,temp_recorded_max,temp_recorded_min))%>%
+  select(-c(temp_recorded_min,temp_recorded_max))
+
+simulated_datetime_df <-rbind(simulated_datetime_df_Fail,simulated_datetime_df_Pass,simulated_datetime_df_ConPass)
+simulated_datetime_df<-simulated_datetime_df%>%
+  group_by(Unit)|>
+  mutate(Index=1:n())|>
+  ungroup()|>
+  filter(Index<25)|>
+  mutate(date_recorded = as.POSIXct(3600 * (Index+4), origin = '2025-01-01', tz = "EST"))|>
+  select(-c(Day,Index))
+simulated_datetime_df_wide<-simulated_datetime_df|>
+  spread(date_recorded,temp_recorded)
+```
+
+```{r}
+for(i in unique(simulated_datetime_df$Unit)){
+simulated_datetime_df%>%
+  filter(Unit == i)%>%
   ggplot()+
-  geom_line(aes(x=date_recorded,y = temp_recorded))
+  geom_line(aes(x=date_recorded,y = temp_recorded))+
+  scale_y_continuous(limits = c(-190, -100), breaks = seq(-180, -100, by = 20))
+  #ggsave(paste0("Unit_",i,".png"))
+}
 ```
 
-```{r}
-simulated_df|>
-  psych::describe()
-```
-```{r}
-one_way <- aov(Mean~ Status, data = simulated_df)  
-??anova
-broom::tidy(one_way)  
-broom::glance.aov(aov(Mean~ Status, data = simulated_df))
-```
 
 ```{r}
-sim_xbar <- qcc(simulated_df[,-c(1:14)],type="xbar",plot=FALSE)
-sim_rbar <- qcc(simulated_df[,-c(1:14)],type="R",plot=FALSE)
+sim_xbar <- qcc(simulated_datetime_df_wide[,-1],type="xbar",plot=FALSE)
+sim_rbar <- qcc(simulated_datetime_df_wide[,-1],type="R",plot=FALSE)
 ```
 
 |   The $\bar{\bar{x}}$ is `r wbb_xbar$center`, with a lower limit of `r wbb_xbar$limits[1]`and upper limit of `r wbb_xbar$limits[2]`.
@@ -89,8 +102,8 @@ sim_rbar <- qcc(simulated_df[,-c(1:14)],type="R",plot=FALSE)
 \
 
 ```{r, echo = FALSE}
-qcc(simulated_df[,-c(1:14)],type="xbar",plot=TRUE)
-qcc(simulated_df[,-c(1:14)],type="R",plot=TRUE)
+qcc(simulated_datetime_df_wide[,-1],type="xbar",plot=TRUE)
+qcc(simulated_datetime_df_wide[,-1],type="R",plot=TRUE)
 sim_xbar$violations
 sim_rbar$violations
 ```
