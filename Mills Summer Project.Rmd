@@ -16,9 +16,6 @@ summarized_stats <- read_excel("Simulated Data Output.xlsx")
 ```
 
 ```{r}
-rbinom(50,1,0.05)
-
-
 set.seed(1)
 summarized_stats$sample_size <- 50
 simulated_df <- summarized_stats |>
@@ -46,9 +43,6 @@ simulated_datetime_df<-summarized_stats_time |>
 #write_csv(simulated_df,"Simulated DF.csv")
 ```
 
-```{r}
-
-```
 
 ```{r}
 simulated_datetime_df_Fail <- simulated_datetime_df%>%
@@ -69,14 +63,14 @@ simulated_datetime_df_ConPass <- simulated_datetime_df%>%
   select(-c(temp_recorded_min,temp_recorded_max))
 
 simulated_datetime_df <-rbind(simulated_datetime_df_Fail,simulated_datetime_df_Pass,simulated_datetime_df_ConPass)
-simulated_datetime_df<-simulated_datetime_df%>%
+simulated_datetime_df_base<-simulated_datetime_df%>%
   group_by(Unit)|>
   mutate(Index=1:n())|>
-  ungroup()|>
+  ungroup()
+simulated_datetime_df_wide<-simulated_datetime_df_base|>
   filter(Index<25)|>
   mutate(date_recorded = as.POSIXct(3600 * (Index+4), origin = '2025-01-01', tz = "EST"))|>
-  select(-c(Day,Index))
-simulated_datetime_df_wide<-simulated_datetime_df|>
+  select(-c(Day,Index))|>
   spread(date_recorded,temp_recorded)
 ```
 
@@ -91,19 +85,145 @@ simulated_datetime_df%>%
 }
 ```
 
-
 ```{r}
-sim_xbar <- qcc(simulated_datetime_df_wide[,-1],type="xbar",plot=FALSE)
-sim_rbar <- qcc(simulated_datetime_df_wide[,-1],type="R",plot=FALSE)
+fail_units<-simulated_df%>%
+  filter(Status == "Fail")
+pass_units<-simulated_df%>%
+  filter(Status == "Pass")
+ConPass_units<-simulated_df%>%
+  filter(Status == "Conditional Pass")
 ```
 
-|   The $\bar{\bar{x}}$ is `r wbb_xbar$center`, with a lower limit of `r wbb_xbar$limits[1]`and upper limit of `r wbb_xbar$limits[2]`.
-|   The $\bar{R}$ is `r wbb_rbar$center`, with a lower limit of `r wbb_rbar$limits[1]` and upper limit of `r wbb_rbar$limits[2]`.
-\
-
-```{r, echo = FALSE}
+#X-Bar
+```{r}
 qcc(simulated_datetime_df_wide[,-1],type="xbar",plot=TRUE)
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% pass_units$Unit)%>%
+      select(-Unit),type="xbar",plot=TRUE)
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% ConPass_units$Unit)%>%
+      select(-Unit),type="xbar",plot=TRUE)
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% fail_units$Unit)%>%
+      select(-Unit),type="xbar",plot=TRUE)
+```
+#R-Chart
+```{r}
 qcc(simulated_datetime_df_wide[,-1],type="R",plot=TRUE)
-sim_xbar$violations
-sim_rbar$violations
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% pass_units$Unit)%>%
+      select(-Unit),type="R",plot=TRUE)
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% ConPass_units$Unit)%>%
+      select(-Unit),type="R",plot=TRUE)
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% fail_units$Unit)%>%
+      select(-Unit),type="R",plot=TRUE)
+```
+
+#S Chart
+```{r}
+qcc(simulated_datetime_df_wide[,-1],type="S",plot=TRUE)
+```
+
+#New DF
+```{r}
+simulated_datetime_df_Week_Wide<-simulated_datetime_df_base|>
+  mutate(Week = floor_date(Day,"week"))|>
+  select(-Index)|>
+  group_by(Unit,Week)|>
+  mutate(Index=1:n())|>
+  ungroup()|>
+  select(-Day)|>
+  spread(Index,temp_recorded)|>
+  ungroup()|>
+  mutate(Week = as.Date(Week))|>
+  filter(Week > "2023-12-31" & Week < "2024-12-29")|>
+  arrange(Unit,Week)
+```
+#CUSUM
+```{r}
+mu0 <- -160
+k <- 0.5
+h <- 5
+cusum(
+  simulated_datetime_df_Week_Wide[,c(3:9)],
+  sizes=7,
+  center=mu0,
+  se.shift=k*2,
+  decision.interval = h,
+  plot=T
+  )
+```
+
+#EWMA
+```{r}
+lambda <- 0.20
+L <- 2.962
+ewma(simulated_datetime_df_Week_Wide[,c(3:9)],
+     center=mu0,
+     lambda=lambda,
+     nsigmas=L)
+```
+#Boyds Chart
+```{r}
+
+LN_means <- tibble(Means = rowMeans(simulated_datetime_df_boyd[,-(1:2)]), # removing CarWashID from the calculation
+                    Unit = simulated_datetime_df_boyd$Unit,
+                    Week = rep(1:51,50))
+
+## Dataframe for Sample Ranges ##
+
+LN_ranges <- tibble(Ranges = 
+                       apply(simulated_datetime_df_boyd[,-(1:2)],1,FUN=function(x){
+                         
+                         max(x) - min(x)
+                         
+                         }), # calculating the range for each row
+                     Unit = simulated_datetime_df_boyd$Unit,
+                    Week = rep(1:51,50)
+              )
+
+## Calculate the Grand Mean ##
+
+xdbar <- mean(LN_means$Means)
+
+rbar <- mean(LN_ranges$Ranges)
+
+## Control Limits ##
+
+A2 <- 0.577
+
+UCL <- xdbar + A2*rbar
+
+LCL <- xdbar - A2*rbar
+
+## Obtain Minimum and Maximum Mean Values for Each Car Wash ##
+
+max_means <- LN_means |>
+  group_by(Week) |>
+  summarize(Max = max(Means),
+            Min = min(Means))
+
+## Plot Phase I Chart ##
+
+max_means |>
+  ggplot(aes(x=Week)) + 
+  geom_line(aes(y=UCL),color="black") +
+  geom_line(aes(y=LCL),color="black") +
+  geom_line(aes(y=Max),color="red") +
+  geom_line(aes(y=Min),color="red") +
+  geom_point(aes(y=Max),color="red") +
+  geom_point(aes(y=Min),color="red") +
+  geom_line(aes(y=xdbar),color="black",linetype="dashed") +
+  labs(x = "Week", 
+       y = "Temperature",
+       title = "Boyd's GCC Phase I Control Chart") +
+  theme_classic() +
+  theme(plot.title=element_text(hjust=0.50)) +
+  scale_x_continuous(breaks = seq(0, 50, by = 5))
+c4 <- 0.9515
+
+
+p1 <- split(simulated_datetime_df_boyd,simulated_datetime_df_boyd$Unit)
 ```
