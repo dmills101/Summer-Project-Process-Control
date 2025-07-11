@@ -9,6 +9,7 @@ output: html_document
 library(tidyverse)
 library(readxl)
 library(qcc)
+library(qicharts2)
 ```
 
 ```{r}
@@ -92,17 +93,26 @@ pass_units<-simulated_df%>%
   filter(Status == "Pass")
 ConPass_units<-simulated_df%>%
   filter(Status == "Conditional Pass")
+simulated_df%>%
+  group_by(Status)%>%
+  summarise(n=n())
 ```
 
 #X-Bar
 ```{r}
 qcc(simulated_datetime_df_wide[,-1],type="xbar",plot=TRUE)
+```
+```{r}
 qcc(simulated_datetime_df_wide%>%
       filter(Unit %in% pass_units$Unit)%>%
       select(-Unit),type="xbar",plot=TRUE)
+```
+```{r}
 qcc(simulated_datetime_df_wide%>%
       filter(Unit %in% ConPass_units$Unit)%>%
       select(-Unit),type="xbar",plot=TRUE)
+```
+```{r}
 qcc(simulated_datetime_df_wide%>%
       filter(Unit %in% fail_units$Unit)%>%
       select(-Unit),type="xbar",plot=TRUE)
@@ -110,12 +120,18 @@ qcc(simulated_datetime_df_wide%>%
 #R-Chart
 ```{r}
 qcc(simulated_datetime_df_wide[,-1],type="R",plot=TRUE)
+```
+```{r}
 qcc(simulated_datetime_df_wide%>%
       filter(Unit %in% pass_units$Unit)%>%
       select(-Unit),type="R",plot=TRUE)
+```
+```{r}
 qcc(simulated_datetime_df_wide%>%
       filter(Unit %in% ConPass_units$Unit)%>%
       select(-Unit),type="R",plot=TRUE)
+```
+```{r}
 qcc(simulated_datetime_df_wide%>%
       filter(Unit %in% fail_units$Unit)%>%
       select(-Unit),type="R",plot=TRUE)
@@ -125,7 +141,135 @@ qcc(simulated_datetime_df_wide%>%
 ```{r}
 qcc(simulated_datetime_df_wide[,-1],type="S",plot=TRUE)
 ```
+```{r}
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% pass_units$Unit)%>%
+      select(-Unit),type="S",plot=TRUE)
+```
+```{r}
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% ConPass_units$Unit)%>%
+      select(-Unit),type="S",plot=TRUE)
+```
+```{r}
+qcc(simulated_datetime_df_wide%>%
+      filter(Unit %in% fail_units$Unit)%>%
+      select(-Unit),type="S",plot=TRUE)
+```
 
+#P Chart
+```{r}
+p_chart_df<-simulated_datetime_df%>%
+  mutate(NCE = if_else(temp_recorded > -140, TRUE,FALSE))%>%
+  group_by(Unit,NCE)%>%
+  summarise(n=n())%>%
+  spread(NCE,n)%>%
+  mutate_if(is.numeric, ~replace(., is.na(.), 0))%>%
+  mutate(`FALSE` = 365)%>%
+  ungroup()
+```
+```{r}
+qcc(p_chart_df$`TRUE`,
+                    type="p",
+                    sizes=p_chart_df$`FALSE`,
+                    plot=TRUE)
+```
+
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% pass_units$Unit))$`TRUE`,
+                    type="p",
+                    sizes=(p_chart_df%>%
+      filter(Unit %in% pass_units$Unit))$`FALSE`,
+                    plot=TRUE)
+```
+
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% ConPass_units$Unit))$`TRUE`,
+                    type="p",
+                    sizes=(p_chart_df%>%
+      filter(Unit %in% ConPass_units$Unit))$`FALSE`,
+                    plot=TRUE)
+```
+
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% fail_units$Unit))$`TRUE`,
+                    type="p",
+                    sizes=(p_chart_df%>%
+      filter(Unit %in% fail_units$Unit))$`FALSE`,
+                    plot=TRUE)
+```
+```{r}
+one_unit<-simulated_datetime_df%>%
+  filter(Unit == 4)%>%
+  mutate(NCE = if_else(temp_recorded > -140, 1,0))%>%
+  mutate(run=1)
+qcc(one_unit$NCE,
+                    type="p",
+                    sizes=one_unit$run,
+                    plot=TRUE)
+```
+#NP Chart
+
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% pass_units$Unit))$`TRUE`,
+                    type="np",
+                    sizes=(p_chart_df%>%
+      filter(Unit %in% pass_units$Unit))$`FALSE`,
+                    plot=TRUE)
+```
+
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% ConPass_units$Unit))$`TRUE`,
+                    type="np",
+                    sizes=(p_chart_df%>%
+      filter(Unit %in% ConPass_units$Unit))$`FALSE`,
+                    plot=TRUE)
+```
+
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% fail_units$Unit))$`TRUE`,
+                    type="np",
+                    sizes=(p_chart_df%>%
+      filter(Unit %in% fail_units$Unit))$`FALSE`,
+                    plot=TRUE)
+```
+```{r}
+qcc(one_unit$NCE,
+                    type="np",
+                    sizes=one_unit$run,
+                    plot=TRUE)
+```
+
+#C Chart
+```{r}
+qcc(p_chart_df$`TRUE`,
+                      type="c",
+                      plot = TRUE)
+```
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% pass_units$Unit))$`TRUE`,
+                      type="c",
+                      plot = TRUE)
+```
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% ConPass_units$Unit))$`TRUE`,
+                      type="c",
+                      plot = TRUE)
+```
+```{r}
+qcc((p_chart_df%>%
+      filter(Unit %in% fail_units$Unit))$`TRUE`,
+                      type="c",
+                      plot = TRUE)
+```
 #New DF
 ```{r}
 simulated_datetime_df_Week_Wide<-simulated_datetime_df_base|>
@@ -141,13 +285,71 @@ simulated_datetime_df_Week_Wide<-simulated_datetime_df_base|>
   filter(Week > "2023-12-31" & Week < "2024-12-29")|>
   arrange(Unit,Week)
 ```
+
 #CUSUM
 ```{r}
+#Variables
 mu0 <- -160
 k <- 0.5
-h <- 5
+h <- 2000
+```
+```{r}
+#All
 cusum(
-  simulated_datetime_df_Week_Wide[,c(3:9)],
+  simulated_datetime_df_Week_Wide%>%
+    select(3:9),
+  sizes=7,
+  center=mu0,
+  se.shift=k*2,
+  decision.interval = h,
+  plot=T
+  )
+```
+```{r}
+#Pass
+cusum(
+  simulated_datetime_df_Week_Wide%>%
+      filter(Unit %in% pass_units$Unit)%>%
+    select(3:9),
+  sizes=7,
+  center=mu0,
+  se.shift=k*2,
+  decision.interval = h,
+  plot=T
+  )
+```
+```{r}
+#Single Pass
+cusum(
+  simulated_datetime_df_Week_Wide%>%
+      filter(Unit == 4)%>%
+    select(3:9),
+  sizes=7,
+  center=mu0,
+  se.shift=k*2,
+  decision.interval = 100,
+  plot=T
+  )
+```
+```{r}
+#Conditional Pass
+cusum(
+  simulated_datetime_df_Week_Wide%>%
+      filter(Unit %in% ConPass_units$Unit)%>%
+    select(3:9),
+  sizes=7,
+  center=mu0,
+  se.shift=k*2,
+  decision.interval = h,
+  plot=T
+  )
+```
+```{r}
+#Fail
+cusum(
+  simulated_datetime_df_Week_Wide%>%
+      filter(Unit %in% fail_units$Unit)%>%
+    select(3:9),
   sizes=7,
   center=mu0,
   se.shift=k*2,
@@ -158,55 +360,137 @@ cusum(
 
 #EWMA
 ```{r}
+#Variables
 lambda <- 0.20
 L <- 2.962
-ewma(simulated_datetime_df_Week_Wide[,c(3:9)],
+```
+```{r}
+#All
+ewma(simulated_datetime_df_Week_Wide%>%
+       select(3:9),
      center=mu0,
      lambda=lambda,
      nsigmas=L)
 ```
+```{r}
+#Pass
+ewma(simulated_datetime_df_Week_Wide%>%
+      filter(Unit %in% pass_units$Unit)%>%
+       select(3:9),
+     center=mu0,
+     lambda=lambda,
+     nsigmas=L)
+```
+```{r}
+#Single Pass
+ewma(simulated_datetime_df_Week_Wide%>%
+      filter(Unit == 4)%>%
+       select(3:9),
+     center=mu0,
+     lambda=lambda,
+     nsigmas=L)
+```
+```{r}
+#Conditional Pass
+ewma(simulated_datetime_df_Week_Wide%>%
+      filter(Unit %in% ConPass_units$Unit)%>%
+       select(3:9),
+     center=mu0,
+     lambda=lambda,
+     nsigmas=L)
+```
+```{r}
+#Fail
+ewma(simulated_datetime_df_Week_Wide%>%
+      filter(Unit %in% fail_units$Unit)%>%
+       select(3:9),
+     center=mu0,
+     lambda=lambda,
+     nsigmas=L)
+```
+
+
+
+
 #Boyds Chart
 ```{r}
-
-LN_means <- tibble(Means = rowMeans(simulated_datetime_df_boyd[,-(1:2)]), # removing CarWashID from the calculation
-                    Unit = simulated_datetime_df_boyd$Unit,
+#Weekly Mean per Unit
+LN_means <- tibble(Means = rowMeans(simulated_datetime_df_Week_Wide[,-(1:2)]),
+                    Unit = simulated_datetime_df_Week_Wide$Unit,
                     Week = rep(1:51,50))
 
-## Dataframe for Sample Ranges ##
-
+#Weekly Range per Unit
 LN_ranges <- tibble(Ranges = 
-                       apply(simulated_datetime_df_boyd[,-(1:2)],1,FUN=function(x){
+                       apply(simulated_datetime_df_Week_Wide[,-(1:2)],1,FUN=function(x){
                          
                          max(x) - min(x)
                          
                          }), # calculating the range for each row
-                     Unit = simulated_datetime_df_boyd$Unit,
+                     Unit = simulated_datetime_df_Week_Wide$Unit,
                     Week = rep(1:51,50)
               )
 
-## Calculate the Grand Mean ##
-
-xdbar <- mean(LN_means$Means)
-
-rbar <- mean(LN_ranges$Ranges)
-
-## Control Limits ##
-
+#Grand Mean, Range, Control Limits - All
 A2 <- 0.577
 
+xdbar <- mean(LN_means$Means)
+rbar <- mean(LN_ranges$Ranges)
 UCL <- xdbar + A2*rbar
-
 LCL <- xdbar - A2*rbar
+#Grand Mean, Range, Control Limits - Pass
+xdbar_pass <- mean((LN_means%>%
+      filter(Unit %in% pass_units$Unit))$Means)
+rbar_pass <- mean((LN_ranges%>%
+      filter(Unit %in% pass_units$Unit))$Ranges)
+UCL_pass <- xdbar_pass + A2*rbar_pass
+LCL_pass <- xdbar_pass - A2*rbar_pass
+#Grand Mean, Range, Control Limits - ConPass
+xdbar_ConPass <- mean((LN_means%>%
+      filter(Unit %in% ConPass_units$Unit))$Means)
+rbar_ConPass <- mean((LN_ranges%>%
+      filter(Unit %in% ConPass_units$Unit))$Ranges)
+UCL_ConPass <- xdbar_ConPass + A2*rbar_ConPass
+LCL_ConPass <- xdbar_ConPass - A2*rbar_ConPass
+#Grand Mean, Range, Control Limits - Fail
+xdbar_Fail <- mean((LN_means%>%
+      filter(Unit %in% fail_units$Unit))$Means)
+rbar_Fail <- mean((LN_ranges%>%
+      filter(Unit %in% fail_units$Unit))$Ranges)
+UCL_Fail <- xdbar_Fail + A2*rbar_Fail
+LCL_Fail <- xdbar_Fail - A2*rbar_Fail
 
-## Obtain Minimum and Maximum Mean Values for Each Car Wash ##
-
+#Each Week Min/Max - All
 max_means <- LN_means |>
   group_by(Week) |>
   summarize(Max = max(Means),
             Min = min(Means))
-
-## Plot Phase I Chart ##
-
+  #Each Week Min/Max - OneUnit
+max_means_Unit4 <- LN_means |>
+  filter(Unit ==4)|>
+  group_by(Week) |>
+  summarize(Max = max(Means),
+            Min = min(Means))
+#Each Week Min/Max - Pass
+max_means_pass <- LN_means |>
+      filter(Unit %in% pass_units$Unit)|>
+  group_by(Week) |>
+  summarize(Max = max(Means),
+            Min = min(Means))
+#Each Week Min/Max - Conditional Pass
+max_means_ConPass <- LN_means |>
+      filter(Unit %in% ConPass_units$Unit)|>
+  group_by(Week) |>
+  summarize(Max = max(Means),
+            Min = min(Means))
+#Each Week Min/Max - Fail
+max_means_Fail <- LN_means |>
+      filter(Unit %in% fail_units$Unit)|>
+  group_by(Week) |>
+  summarize(Max = max(Means),
+            Min = min(Means))
+```
+#Boyds Chart
+```{r}
 max_means |>
   ggplot(aes(x=Week)) + 
   geom_line(aes(y=UCL),color="black") +
@@ -222,8 +506,105 @@ max_means |>
   theme_classic() +
   theme(plot.title=element_text(hjust=0.50)) +
   scale_x_continuous(breaks = seq(0, 50, by = 5))
-c4 <- 0.9515
+```
+```{r}
+max_means_pass |>
+  ggplot(aes(x=Week)) + 
+  geom_line(aes(y=UCL_pass),color="black") +
+  geom_line(aes(y=LCL_pass),color="black") +
+  geom_line(aes(y=Max),color="red") +
+  geom_line(aes(y=Min),color="red") +
+  geom_point(aes(y=Max),color="red") +
+  geom_point(aes(y=Min),color="red") +
+  geom_line(aes(y=xdbar_pass),color="black",linetype="dashed") +
+  labs(x = "Week", 
+       y = "Temperature",
+       title = "Boyd's GCC Phase I Control Chart") +
+  theme_classic() +
+  theme(plot.title=element_text(hjust=0.50)) +
+  scale_x_continuous(breaks = seq(0, 50, by = 5))
+```
+```{r}
+#one Unit
+max_means_oneunit <- LN_means |>
+      filter(Unit ==4)|>
+  group_by(Week) |>
+  summarize(Max = max(Means),
+            Min = min(Means))
+xdbar_one <- mean((LN_means%>%
+      filter(Unit ==4))$Means)
+rbar_one <- mean((LN_ranges%>%
+      filter(Unit ==4))$Ranges)
+UCL_one <- xdbar_one + A2*rbar_one
+LCL_one <- xdbar_one - A2*rbar_one
+
+  max_means_oneunit|>
+  ggplot(aes(x=Week)) + 
+  geom_line(aes(y=UCL_one),color="black") +
+  geom_line(aes(y=LCL_one),color="black") +
+  geom_line(aes(y=Max),color="red") +
+  geom_line(aes(y=Min),color="red") +
+  geom_point(aes(y=Max),color="red") +
+  geom_point(aes(y=Min),color="red") +
+  geom_line(aes(y=xdbar_one),color="black",linetype="dashed") +
+  labs(x = "Week", 
+       y = "Temperature",
+       title = "Boyd's GCC Phase I Control Chart") +
+  theme_classic() +
+  theme(plot.title=element_text(hjust=0.50)) +
+  scale_x_continuous(breaks = seq(0, 50, by = 5))
+```
+```{r}
+max_means_ConPass |>
+  ggplot(aes(x=Week)) + 
+  geom_line(aes(y=UCL_ConPass),color="black") +
+  geom_line(aes(y=LCL_ConPass),color="black") +
+  geom_line(aes(y=Max),color="red") +
+  geom_line(aes(y=Min),color="red") +
+  geom_point(aes(y=Max),color="red") +
+  geom_point(aes(y=Min),color="red") +
+  geom_line(aes(y=xdbar_ConPass),color="black",linetype="dashed") +
+  labs(x = "Week", 
+       y = "Temperature",
+       title = "Boyd's GCC Phase I Control Chart") +
+  theme_classic() +
+  theme(plot.title=element_text(hjust=0.50)) +
+  scale_x_continuous(breaks = seq(0, 50, by = 5))
+```
+```{r}
+max_means_Fail |>
+  ggplot(aes(x=Week)) + 
+  geom_line(aes(y=UCL_Fail),color="black") +
+  geom_line(aes(y=LCL_Fail),color="black") +
+  geom_line(aes(y=Max),color="red") +
+  geom_line(aes(y=Min),color="red") +
+  geom_point(aes(y=Max),color="red") +
+  geom_point(aes(y=Min),color="red") +
+  geom_line(aes(y=xdbar_Fail),color="black",linetype="dashed") +
+  labs(x = "Week", 
+       y = "Temperature",
+       title = "Boyd's GCC Phase I Control Chart") +
+  theme_classic() +
+  theme(plot.title=element_text(hjust=0.50)) +
+  scale_x_continuous(breaks = seq(0, 50, by = 5))
+```
 
 
-p1 <- split(simulated_datetime_df_boyd,simulated_datetime_df_boyd$Unit)
+```{r}
+t_chart_df<-simulated_datetime_df%>%
+  filter(Unit == 12)%>%
+  mutate(NCE = if_else(temp_recorded > -140, TRUE,FALSE))%>%
+  filter(NCE == TRUE)
+t_chart_df<-simulated_datetime_df%>%
+  filter(Unit %in% pass_units$Unit)%>%
+  mutate(NCE = if_else(temp_recorded > -140, TRUE,FALSE))%>%
+  filter(NCE == TRUE)
+  
+t_chart_time<-c(NA,diff(t_chart_df$Day))
+
+t_graph<-qic(t_chart_time,
+    chart = "t")
+t_graph
+??qicharts2
+summary.qic(t_graph)
 ```
